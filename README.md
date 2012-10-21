@@ -1,13 +1,13 @@
-ios-sqlite-connect
-====================
+## What is it ?
 
-iOS SQLite Connect API Library, 
+It's an iOS SQLite 3 Connect API Library to make database with app.
 
-It used SQLite 3 of iOS to make database in apps.
+## How To Get Started
 
-#A sample of making tables: 
+To Imports "Database.h".
 
---#import "Database.h"
+``` objective-c
+//A sample of making a table.
 -(void)createTables{
 	Database *Db = [[Database alloc] init];
 	if( [Db databaseExists] ){
@@ -23,4 +23,5 @@ It used SQLite 3 of iOS to make database in apps.
     }
     [Db release];
 }
+```
 
