@@ -1,10 +1,10 @@
 //
 //  Database.h
 //
-//  Version 1.1
+//  Version 1.2
 //
-//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/06/01.
-//  Copyright 2011 Kuo-Ming Lin. All rights reserved.
+//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/09/01.
+//  Copyright 2013 Kuo-Ming Lin. All rights reserved.
 //
 
 #import <Foundation/Foundation.h>
@@ -17,7 +17,7 @@
 #define DEFAULT_LIMIT_START 0
 #define DEFAULT_LIMIT_END   10
 
-@interface Database : NSObject{
+@interface KRDatabase : NSObject{
 
 @protected
     sqlite3 *database;
@@ -26,23 +26,40 @@
 
 @property (nonatomic, assign) BOOL isConnecting;
 
+//
++(KRDatabase *)sharedManager;
+//不自動連線資料庫
+-(id)initWaitingForConnection;
 //取得資料庫檔案存放完整路徑名稱
 -(NSString *)getDatabaseSavedPath;
+//取得資料庫檔案存放完整路徑名稱
++(NSString *)databaseFilePath;
 //檢查資料庫檔案是否存在
 -(BOOL)databaseExists;
+//檢查資料庫檔案是否存在
++(BOOL)databaseExists;
 //準備資料庫
--(void)readyWithDatabase;
-//當資料庫不存在時複製預備資料庫
+-(void)readyDatabase;
+//如果資料庫不存在，才 Copy mainBundle 底下的預備資料庫，至 Document 底下
++(void)copyDefaultToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType;
+-(void)copyDefaultToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType;
+//直接複製 App 指定在 mainBundle 路徑底下的資料庫，覆蓋到 App 的 Document 文件路徑底下
+-(void)copyMainBundleDatabaseToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType;
+//當資料庫不存在時複製 mainBundle 裡的預備資料庫
 -(void)copyWithoutDatabase;
 //連結資料庫
--(int)connectWithDatabase;
+-(int)connectDatabase;
 //關閉資料庫
--(void)closeWithDatabase;
+-(void)closeDatabase;
 //刪除資料庫
--(void)dropWithDatabase;
-//查詢 : 回傳的陣列裡，第二次陣列為 Dictionary :: KEY / 欄位名, Value / 資料 :: 參數 :: SQL 語句 :: 設定查詢結果要取得表單裡哪幾個欄位的值
+-(void)dropDatabase;
+//查詢(可限定查詢結果要取得表單裡哪幾個欄位的值)
 -(NSMutableArray *)execSelect:(NSString *)_sqlString 
                 resultColumns:(int)_cols;
+//直接查詢
+-(NSMutableArray *)execSelect:(NSString *)_sqlString;
+//直接執行 INSERT, UPDATE, DELETE 等等非查詢動作的語法
+-(BOOL)execQuery:(NSString *)_sqlString;
 //新增 / 刪除 / 修改
 -(BOOL)execQuery:(NSString *)_sqlString 
    sqlParamArray:(NSArray *)_params;
@@ -60,6 +77,8 @@
                               andNowPage:(int)_nowPage 
                            andLimitStart:(int)_start 
                              andLimitEnd:(int)_end;
+//直接執行 SQL 語句
+-(void)directExecSQL:(NSString *)_sqlString;
 //新建資料表 : 資料表名稱 :: 欄位與參數
 -(void)createTablesWithName:(NSString *)_tableName 
                   andParams:(NSDictionary *)_paramsArray;

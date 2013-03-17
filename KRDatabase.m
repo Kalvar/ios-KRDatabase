@@ -1,21 +1,22 @@
 //
 //  Database.m
 //
-//  Version 1.1
+//  Version 1.2
 //
-//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/06/01.
-//  Copyright 2011 Kuo-Ming Lin. All rights reserved.
+//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/09/01.
+//  Copyright 2013 Kuo-Ming Lin. All rights reserved.
 //
-#import "Database.h"
 
-@interface Database (Private)
+#import "KRDatabase.h"
+
+@interface KRDatabase (Private)
 
 -(NSString *)_trimString:(NSString *)_string;
 -(BOOL)_stringIsEmpty:(NSString *)_checkString;
 
 @end
 
-@implementation Database (Private)
+@implementation KRDatabase (Private)
 
 -(BOOL)_stringIsEmpty:(NSString *)_checkString{
     NSString *_string = [self _trimString:[NSString stringWithFormat:@"%@", _checkString]];
@@ -29,19 +30,43 @@
 @end
 
 
-@implementation Database
+@implementation KRDatabase
 
 @synthesize isConnecting;
 
-- (id)init
+//
++(KRDatabase *)sharedManager{
+    return [[self alloc] init];
+}
+
+/*
+ * @ 會自動連線資料庫
+ */
+-(id)init
 {
     self = [super init];
     if (self) {
-        self.isConnecting = ( [self connectWithDatabase] == SQLITE_OK ) ? YES : NO;
+        self.isConnecting = ( [self connectDatabase] == SQLITE_OK ) ? YES : NO;
     }
     return self;
 }
 
+/*
+ * @ 不自動連線資料庫
+ *  
+ *   - 等待手動連線 : [self connectDatabase];
+ */
+-(id)initWaitingForConnection{
+    self = [super init];
+    if (self) {
+        self.isConnecting = NO;
+    }
+    return self;
+}
+
+/*
+ * 會存放於 Document 底下
+ */
 //取得資料庫檔案存放完整路徑名稱
 -(NSString *)getDatabaseSavedPath{
     //取得根目錄路徑集合陣列
@@ -54,22 +79,86 @@
     return [documentsDirectory stringByAppendingPathComponent:fullDbName];    
 }
 
+//取得資料庫檔案存放完整路徑名稱
++(NSString *)databaseFilePath{
+    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    return [(NSString *)[paths objectAtIndex:0] stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@", DBNAME, DBEXT]];
+}
+
 //檢查資料庫檔案是否存在
 -(BOOL)databaseExists{
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSString *databasePath     = [self getDatabaseSavedPath];
-    return [fileManager fileExistsAtPath:databasePath];    
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self getDatabaseSavedPath]];
+}
+
+//檢查資料庫檔案是否存在
++(BOOL)databaseExists{
+    return [[NSFileManager defaultManager] fileExistsAtPath:[self databaseFilePath]];
 }
 
 //準備資料庫
--(void)readyWithDatabase{
+-(void)readyDatabase{
     if( ![self databaseExists] ){
         //複製預備資料庫
         [self copyWithoutDatabase];
     }    
 }
 
-//當資料庫不存在時複製預備資料庫 
+/*
+ * @ 說明
+ *   如果資料庫不存在，才 Copy mainBundle 底下的預備資料庫，至 Document 底下。
+ */
++(void)copyDefaultToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType{
+    if( ![self databaseExists] ){
+        NSError *error;
+        [[NSFileManager defaultManager] copyItemAtPath:[[NSBundle mainBundle] pathForResource:_mainBundleDbName ofType:_mainBundleDbType]
+                                                toPath:[self databaseFilePath]
+                                                 error:&error];
+    }
+}
+
+/*
+ * @ 說明
+ *   如果資料庫不存在，才 Copy mainBundle 底下的預備資料庫，至 Document 底下。
+ */
+-(void)copyDefaultToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType{
+    if( ![self databaseExists] ){
+        NSError *error;
+        [[NSFileManager defaultManager] copyItemAtPath:[[NSBundle mainBundle] pathForResource:_mainBundleDbName ofType:_mainBundleDbType]
+                                                toPath:[self getDatabaseSavedPath]
+                                                 error:&error];
+    }
+}
+
+/*
+ * @ 說明
+ *
+ *   直接複製 App 指定在 mainBundle 路徑底下的資料庫，覆蓋到 App 的 Document 文件路徑底下。
+ *
+ */
+-(void)copyMainBundleDatabaseToDocumentWithName:(NSString *)_mainBundleDbName ofType:(NSString *)_mainBundleDbType
+{
+    NSString *_dbMainBundlePath = [[NSBundle mainBundle] pathForResource:_mainBundleDbName ofType:_mainBundleDbType];
+    //Copy to Document 的位置
+    NSError *error;
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString *_dbDocumentPath  = [self getDatabaseSavedPath];
+    //資料庫存在就先刪除
+    if( [fileManager fileExistsAtPath:_dbDocumentPath] ){
+        [self dropDatabase];
+    }
+    [fileManager copyItemAtPath:_dbMainBundlePath
+                         toPath:_dbDocumentPath
+                          error:&error];
+}
+
+/*
+ * @ 說明
+ *
+ *   當 DB 於 Document 裡不存在時，執行此 copyWithoutDatabase 函式，
+ *   會自動在 mainBundle 裡搜尋預設的 DB 名稱( DBNAME 與 DBEXT )，
+ *   並 Copy 該 DB File 到 Document 底下。
+ */
+//當資料庫不存在時複製 mainBundle 裡的預備資料庫
 -(void)copyWithoutDatabase{
     NSError *error;
     //啟動檔案管理員
@@ -96,19 +185,19 @@
 }
 
 //連結資料庫 : DB 不存在時，會重建一個
--(int)connectWithDatabase{
+-(int)connectDatabase{
     NSString *databasePath = [self getDatabaseSavedPath];
     //如果已在 init 初始時開啟資料庫連線 : 則直接回傳連線成功
     if( self.isConnecting == YES ){
         return SQLITE_OK;
     }
     
-    //連接資料庫並回傳狀態( INT 型態 ) : sqlite3_open 會同時新建一個資料庫
-    int connectStatus      = sqlite3_open([databasePath UTF8String], &database);
+    //連接資料庫並回傳狀態( INT 型態 ) : sqlite3_open 會「同時新建一個資料庫」
+    int connectStatus = sqlite3_open([databasePath UTF8String], &database);
     //資料庫開啟失敗
     if( connectStatus != SQLITE_OK ){
         //關閉 SQLite
-        [self closeWithDatabase];
+        [self closeDatabase];
     }else{
         //NSLog(@"資料庫連線中 \n");
     }
@@ -117,13 +206,13 @@
 }
 
 //關閉資料庫
--(void)closeWithDatabase{
+-(void)closeDatabase{
     sqlite3_close(database);
     self.isConnecting = NO;
 }
 
 //刪除資料庫
--(void)dropWithDatabase{
+-(void)dropDatabase{
     //先檢查 DB 檔案是否存在
     if( [self databaseExists] ){
         //宣告檔案管理員
@@ -138,22 +227,47 @@
 }
 
 /*
+ * 直接執行 INSERT, UPDATE, DELETE 等等非查詢動作的語法。
+ */
+-(BOOL)execQuery:(NSString *)_sqlString
+{
+    if( [self connectDatabase] == SQLITE_OK ){
+        char *error;
+        if ( sqlite3_exec(database, [_sqlString UTF8String], NULL, NULL, &error) == SQLITE_OK){
+            //取得最新新增的資料 ID，跟 PHP 的 insert_id() 一樣
+            //int _insertId = sqlite3_last_insert_rowid(database);
+            //NSLog(@"insertId : %i", _insertId);
+            return YES;
+        }else{
+            NSLog(@"error : %s", error);
+        }
+        [self closeDatabase];
+        sqlite3_free(error);
+    }
+    return NO;
+}
+
+/*
+ * # 參數
+ *   _sqlString : SQL 語句
+ *   _cols : 設定查詢結果要取得表單裡哪幾個欄位的值
+ *
  * # 查詢 Sample : 
  *   1). sqlString = @"SELECT * FROM t_test WHERE score > 0";
- *   2). sqlString = @
- *   
- *   [self execSelect:sql resultColumns:4];
+ *       [self execSelect:sql resultColumns:4];
  * 
- * # 回傳值 : 以欄位名為 Key, 欄位值為 Value
+ * # 回傳值
+ *   回傳的陣列裡，第二層陣列為 Dictionary以欄位名為 Key, 欄位值為 Value
  *
  */
-//查詢 : 回傳的陣列裡，第二次陣列為 Dictionary :: KEY / 欄位名, Value / 資料 :: 參數 :: SQL 語句 :: 設定查詢結果要取得表單裡哪幾個欄位的值
+//查詢(可限定查詢結果要取得表單裡哪幾個欄位的值)
 -(NSMutableArray *)execSelect:(NSString *)_sqlString 
-                resultColumns:(int)_cols{
+                resultColumns:(int)_cols
+{
     //查詢的結果陣列
-	NSMutableArray *dataArray = [[[NSMutableArray alloc] init] autorelease];
+	NSMutableArray *dataArray = [[NSMutableArray alloc] init];
     //開啟資料庫連線 : 成功
-    if( [self connectWithDatabase] == SQLITE_OK ){
+    if( [self connectDatabase] == SQLITE_OK ){
         //SQL 查詢結果存在 sqlite3_stmt 類型裡( $Result )
         sqlite3_stmt *statement = nil;
         //進行查詢
@@ -162,18 +276,27 @@
             while (sqlite3_step(statement) == SQLITE_ROW) {
                 //存放一筆記錄 : 使用 KEY / VALUE 方式儲存
 				NSMutableDictionary *rowsArray = [[NSMutableDictionary alloc] init];
+                int _columnCount = _cols;
+                //如為 0，則改取得 SQL 欄位總數
+                if( _columnCount <= 0 ){
+                    //以下兩種方法皆可
+                    _columnCount = sqlite3_column_count(statement);
+                    //_columnCount = sqlite3_data_count(statement);
+                }
 				//_cols 限定取出表單裡的哪幾個欄位的值
-				for( int i=0; i<_cols; i++ ){
+                for( int i=0; i<_columnCount; i++ ){
                     //目前的 SQL 欄位名稱 :: KEY
                     NSString *rowName  = [NSString stringWithFormat:@"%s", sqlite3_column_name(statement, i)];
-                    NSString *rowValue = [NSString stringWithUTF8String:(char *)sqlite3_column_text(statement, i)];                             
+                    NSString *rowValue = @"";
+                    char *_charRowValue = (char *)sqlite3_column_text(statement, i);
+                    if( _charRowValue ){
+                        rowValue = [NSString stringWithUTF8String:_charRowValue];
+                    }
                     //存入字典陣列 : 欄位值 / 欄位名
-                    [rowsArray setValue:rowValue forKey:rowName]; 
-				}
+                    [rowsArray setValue:rowValue forKey:rowName];
+                }
                 //存入回傳陣列
 				[dataArray addObject:rowsArray];
-                
-				[rowsArray release];
             }//end while
         }else {
 			NSLog(@"Error: failed to prepare");
@@ -181,19 +304,22 @@
 		}//end if
         //釋放記憶體
         sqlite3_finalize(statement);    
-    
     }else{
         //連線失敗
         //NSAssert1(0, @"Failed to open database with message '%s'.", sqlite3_errmsg(database));        
     }
     
-    [self closeWithDatabase];
+    [self closeDatabase];
     
 	return dataArray;    
 }
-/*
-   
- */
+
+//直接查詢
+-(NSMutableArray *)execSelect:(NSString *)_sqlString
+{
+    return [self execSelect:_sqlString resultColumns:0];
+}
+
 /*
  * # Sample : 
  *   //新增
@@ -217,21 +343,17 @@
 */
 //新增 / 刪除 / 修改
 -(BOOL)execQuery:(NSString *)_sqlString 
-   sqlParamArray:(NSArray *)_params{
-	
-    if ( [self connectWithDatabase] == SQLITE_OK ) {
-        //建立記錄要執行的 SQL 語句之物件
+   sqlParamArray:(NSArray *)_params
+{
+    //NSLog(@"UTF8String : %s\n", [_sqlString UTF8String]);
+    if ( [self connectDatabase] == SQLITE_OK ) {
+        //針對 sqlite3_stmt 建立並記錄要執行的 SQL 語句之物件，以便後續使用
         sqlite3_stmt *statement = nil;
-        
-        //NSLog(@"UTF8String : %s\n", [_sqlString UTF8String]);
-        
-        int success = sqlite3_prepare_v2(database, [_sqlString UTF8String], -1, &statement, NULL);
-        
+        int success = sqlite3_prepare_v2(database, [_sqlString UTF8String], -1, &statement, NULL);        
 		if (success != SQLITE_OK) {
 			//NSLog(@"Error: execQuery 轉換成位元組碼失敗 : %s \n", [_sqlString UTF8String]);
 			return NO;
 		}
-        
 		//绑定参数
 		NSInteger max = [_params count];
 		for (int i=0; i<max; i++) {
@@ -239,19 +361,16 @@
             //如為空字串
             if( [self _stringIsEmpty:temp] ){
                 //將字串設定預設值後再寫入 DB
-                temp = [NSString stringWithString:DEFAULT_STRING];
+                temp = DEFAULT_STRING;
             }
 			sqlite3_bind_text(statement, i+1, [temp UTF8String], -1, SQLITE_TRANSIENT);
 		}
-        
         //執行經由 sqlite3_prepare_v2() 方法編成位元組碼的 SQL 語句
 		success = sqlite3_step(statement);
-        
         //釋放 statement : 之後關閉資料庫
         sqlite3_finalize(statement);
         //關閉資料庫
-		[self closeWithDatabase];
-        
+		[self closeDatabase];
         if (success == SQLITE_ERROR) {
 			return NO;
 		}
@@ -269,7 +388,8 @@
  *   [self getRowsNumbersOfExecSQL:_sqlString];
  */
 //取得指定查詢的 SQL 語句資料總筆數
--(int)getRowsNumbersOfExecSQL:(NSString *)_sqlString{
+-(int)getRowsNumbersOfExecSQL:(NSString *)_sqlString
+{
     NSMutableArray *dataArray = [self execSelect:_sqlString resultColumns:1];
     int dataCount = [dataArray count];
     return ( dataCount > 0 ) ? dataCount : 0;   
@@ -284,7 +404,8 @@
  *   [self getRowsNumbersOfExecTable:_tableName];
  */
 //取得指定資料表的資料總筆數
--(int)getRowsNumbersOfExecTable:(NSString *)_tableName{
+-(int)getRowsNumbersOfExecTable:(NSString *)_tableName
+{
     NSString *_sqlString = [NSString stringWithFormat:@"SELECT count(*) AS rows_number FROM %@", _tableName];
     NSMutableArray *dataArray = [self execSelect:_sqlString resultColumns:1];
     return ( [dataArray count] > 0 ) ? [[[dataArray objectAtIndex:0] objectForKey:@"rows_number"] intValue] : 0;
@@ -336,8 +457,8 @@
 -(NSDictionary *)calculatePagesWithTotal:(int)_totalPages 
                               andNowPage:(int)_nowPage 
                            andLimitStart:(int)_start 
-                             andLimitEnd:(int)_end{
-    
+                             andLimitEnd:(int)_end
+{    
     //到第幾筆結束 ?
     int limitEnd    = ( _end < 1 ) ? DEFAULT_LIMIT_END : _end;
     //當前頁數
@@ -400,7 +521,6 @@
                                //跳頁陣列 : [分頁數] = LIMIT_START
                                jumpDicts, @"jumps", 
                                nil];
-    [jumpDicts release];
     return pageDicts;
 }
 
@@ -416,8 +536,8 @@
 -(NSDictionary *)calculatePagesWithTable:(NSString *)_tableName 
                               andNowPage:(int)_nowPage 
                            andLimitStart:(int)_start 
-                             andLimitEnd:(int)_end{
-    
+                             andLimitEnd:(int)_end
+{    
     int total = [self getRowsNumbersOfExecTable:_tableName];
     return [self calculatePagesWithTotal:total 
                               andNowPage:_nowPage 
@@ -425,14 +545,42 @@
                              andLimitEnd:_end];
 }
 
-//新建資料表 : 資料表名稱 :: 欄位與參數
--(void)createTablesWithName:(NSString *)_tableName 
-                  andParams:(NSDictionary *)_paramsArray{
-    
+//直接執行 SQL 語句
+-(void)directExecSQL:(NSString *)_sqlString
+{
     char *createErrors;
-    
+    if( [self connectDatabase] == SQLITE_OK ){
+        //如果執行 SQL 失敗
+        if( sqlite3_exec(database, [_sqlString UTF8String], NULL, NULL, &createErrors) != SQLITE_OK ){
+            [self closeDatabase];
+            sqlite3_free(createErrors);
+        }
+    }
+}
+
+/*
+ * @ Sample
+ *
+ * NSDictionary *_tableParams = [NSDictionary dictionaryWithObjectsAndKeys:
+ *                               @"INTEGER PRIMARY KEY AUTOINCREMENT", @"id",
+ *                               @"INT(4)", @"bar",
+ *                               @"INT(12)", @"comment",
+ *                               @"INT(10)", @"user",
+ *                               @"INT(8)", @"feeling1",
+ *                               @"INT(8)", @"feeling2",
+ *                               @"INT(8)", @"feeling3",
+ *                               @"FLOAT(8)", @"beauty",
+ *                               @"DATETIME DEFAULT CURRENT_TIMESTAMP", @"updatetime",
+ *                               nil];
+ * //建立資料表
+ * [self createTablesWithName:@"evaluation" andParams:_tableParams];
+ */
+//新建資料表 : 資料表名稱 :: 欄位與參數
+-(void)createTablesWithName:(NSString *)_tableName
+                  andParams:(NSDictionary *)_paramsArray
+{
+    char *createErrors;
     NSString *sqlString = [NSString stringWithFormat:@"CREATE TABLE IF NOT EXISTS %@(", _tableName];
-    
     //取出欄位名( key ) 與欄位參數( value )
     int i = 0;
     for( NSString *sqlRowName in _paramsArray ){
@@ -443,37 +591,31 @@
         }
         i++;
     }
-    
     sqlString = [sqlString stringByAppendingString:@" );"];
-    
     //NSLog(@"createTables sqlString : %@ \n", sqlString);
-    
     //連結資料庫成功
-    if( [self connectWithDatabase] == SQLITE_OK ){
+    if( [self connectDatabase] == SQLITE_OK ){
         //執行 SQL 語法 : 如果執行失敗
         if( sqlite3_exec(database, [sqlString UTF8String], NULL, NULL, &createErrors) != SQLITE_OK ){
             //關閉 DB
-            [self closeWithDatabase];
+            [self closeDatabase];
             sqlite3_free(createErrors);
         }else{
             //NSLog(@"建立 %@ 資料表成功\n", _tableName);
         }//endif
     }else{
-    
         //NSLog(@"連結資料庫失敗 \n");
-        
     }
-
 }
 
 //刪除資料表
 -(void)dropTableWithName:(NSString *)_tableName{
     char *dropErrors;
-    NSString *sqlString = [NSString stringWithFormat:@"DROP TABLE IF EXISTS %@", DBNAME, _tableName];
     //連結資料庫成功
-    if( [self connectWithDatabase] == SQLITE_OK ){
+    if( [self connectDatabase] == SQLITE_OK ){
+        NSString *sqlString = [NSString stringWithFormat:@"DROP TABLE IF EXISTS %@", _tableName];
         if( sqlite3_exec(database, [sqlString UTF8String], NULL, NULL, &dropErrors) != SQLITE_OK ){
-            [self closeWithDatabase];
+            [self closeDatabase];
             sqlite3_free(dropErrors);
         }
     }
@@ -485,9 +627,9 @@
     char *renameErrors;
     NSString *renameSql = [NSString stringWithFormat:@"ALTER TABLE %@ RENAME TO %@", _tableName, _tableRename];
     //連結資料庫成功
-    if( [self connectWithDatabase] == SQLITE_OK ){
+    if( [self connectDatabase] == SQLITE_OK ){
         if( sqlite3_exec(database, [renameSql UTF8String], NULL, NULL, &renameErrors) != SQLITE_OK ){
-            [self closeWithDatabase];
+            [self closeDatabase];
             sqlite3_free(renameErrors);
         }
     }
@@ -497,7 +639,7 @@
 -(void)alterTableWithName:(NSString *)_tableName 
                 addColumns:(NSDictionary *)_paramsArray{
     //連結資料庫成功
-    if( [self connectWithDatabase] == SQLITE_OK ){
+    if( [self connectDatabase] == SQLITE_OK ){
         for( NSString *sqlRowName in _paramsArray ){
             NSString *alterSql = [NSString stringWithFormat:@"ALTER TABLE %@ ADD COLUMN %@ %@", 
                                   _tableName, 
@@ -507,14 +649,10 @@
             sqlite3_exec(database, [alterSql UTF8String], NULL, NULL, NULL);
         }
         //關閉連線
-        [self closeWithDatabase];
+        [self closeDatabase];
     }
 }
 
--(void)dealloc{
-    //[database release];
-    [super dealloc];
-}
 
 @end
 
