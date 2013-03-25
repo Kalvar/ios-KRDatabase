@@ -21,5 +21,12 @@ It's an iOS SQLite 3 Connect API Library to make database with app, that you nee
     	[_krDatabase createTablesWithName:@"journal" andParams:tableParamsDict];        
     }
 }
+
+//SELECT
+[[KRDatabase sharedManager] execSelect:@"SELECT * FROM sample_table WHERE sample_id = 1"];
+//UPDATE
+[[KRDatabase sharedManager] execSelect:@"UPDATE sample_table SET sample_name = 'WOW' WHERE sample_id = 1"];
+//DELETE
+[[KRDatabase sharedManager] execSelect:@"DELETE FROM sample_table WHERE sample_id = 1"];
 ```
 
