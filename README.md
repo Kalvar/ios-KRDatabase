@@ -30,3 +30,6 @@ It's an iOS SQLite 3 Connect API Library to make database with app, that you nee
 [[KRDatabase sharedManager] execSelect:@"DELETE FROM sample_table WHERE sample_id = 1"];
 ```
 
+## Version
+
+V1.2
