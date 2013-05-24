@@ -1,9 +1,9 @@
 //
 //  Database.h
 //
-//  Version 1.2
+//  Version 1.2.1
 //
-//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/05/01.
+//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2011/10/01.
 //  Copyright 2011 - 2013 Kuo-Ming Lin. All rights reserved.
 //
 

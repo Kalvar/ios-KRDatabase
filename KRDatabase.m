@@ -1,9 +1,9 @@
 //
 //  Database.m
 //
-//  Version 1.2
+//  Version 1.2.1
 //
-//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2012/05/01.
+//  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2011/10/01.
 //  Copyright 2011 - 2013 Kuo-Ming Lin. All rights reserved.
 //
 
@@ -445,12 +445,6 @@
             //dispatch_async(dispatch_get_main_queue(), ^(void) {});
         });
     }
-
-
-//    接續上方的新函式，之後在這裡寫一個 NSTimer，以每秒 50 件的模式，處理 _failureCaches 裡的 SQL 語句，
-//    如果處理不成功，又遇到了死結，那就再寫一個 NSTimer，並設定 1 秒後再繼續執行 （ 暫停 1 秒鐘等解鎖 ），
-//    而其他情況則以此類推。
-    
 }
 
 -(NSMutableArray *)getFailedCaches
