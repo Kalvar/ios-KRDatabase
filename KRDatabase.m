@@ -1,7 +1,7 @@
 //
-//  Database.m
+//  KRDatabase.m
 //
-//  Version 1.2.1
+//  Version 1.3
 //
 //  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2011/10/01.
 //  Copyright 2011 - 2013 Kuo-Ming Lin. All rights reserved.
@@ -880,6 +880,17 @@
     [self closeDatabase];
 }
 
+-(BOOL)tableExistsWithName:(NSString *)_tableName
+{
+    NSString *_sqlQuery = [NSString stringWithFormat:@"SELECT name FROM sqlite_master WHERE type='table' AND name='%@'", _tableName];
+    NSMutableArray *_tables = [self execSelect:_sqlQuery];
+    return ( [_tables count] > 0 );
+}
+
++(BOOL)tableExistsWithName:(NSString *)_tableName
+{
+    return [[KRDatabase sharedManager] tableExistsWithName:_tableName];
+}
 
 @end
 

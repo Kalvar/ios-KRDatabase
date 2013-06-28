@@ -1,7 +1,7 @@
 //
-//  Database.h
+//  KRDatabase.h
 //
-//  Version 1.2.1
+//  Version 1.3
 //
 //  Created by Kuo-Ming Lin ( Kalvar ; ilovekalvar@gmail.com ) on 2011/10/01.
 //  Copyright 2011 - 2013 Kuo-Ming Lin. All rights reserved.
@@ -164,5 +164,10 @@
  * @ 增加資料表欄位
  */
 -(void)alterTableWithName:(NSString *)_tableName addColumns:(NSDictionary *)_params;
+/*
+ * @ 檢查資料表是否存在
+ */
+-(BOOL)tableExistsWithName:(NSString *)_tableName;
++(BOOL)tableExistsWithName:(NSString *)_tableName;
 
 @end
